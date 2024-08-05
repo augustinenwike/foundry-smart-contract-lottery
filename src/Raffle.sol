@@ -57,6 +57,7 @@ contract Raffle is VRFConsumerBaseV2 {
 
     event EnteredRaffle(address indexed player);
     event PickedWinner(address indexed winner);
+    event RequestedRaffleWinner(uint256 indexed requestId);
 
     constructor(
         uint256 entranceFee,
@@ -87,30 +88,41 @@ contract Raffle is VRFConsumerBaseV2 {
         emit EnteredRaffle(msg.sender);
     }
 
-    function checkUpkeep(bytes memory /* performData */ ) public view returns (bool upKeepNeeded, bytes memory /**performData*/) {
+    function checkUpkeep(bytes memory /* performData */ ) public view returns (bool upKeepNeeded, bytes memory) 
+    /**
+     * performData
+     */
+    {
         bool timeHasPassed = (block.timestamp - s_lastTimestamp) >= i_interval;
         bool isOpen = RaffleState.OPEN == s_raffleState;
         bool hasBalance = address(this).balance > 0;
         bool hasPlayers = s_players.length > 0;
         upKeepNeeded = (timeHasPassed && isOpen && hasBalance && hasPlayers);
-        return (upKeepNeeded,"0x0");
+        return (upKeepNeeded, "0x0");
     }
 
-    function performUpkeep(bytes calldata /* performData */) external {
+    function performUpkeep(bytes calldata /* performData */ ) external {
         (bool upKeepNeeded,) = checkUpkeep("");
-        if(!upKeepNeeded) {
-            revert Raffle__UpkeepNotNeeded(address(this).balance,s_players.length,uint256(s_raffleState));
+        if (!upKeepNeeded) {
+            revert Raffle__UpkeepNotNeeded(address(this).balance, s_players.length, uint256(s_raffleState));
         }
         if (block.timestamp - s_lastTimestamp < i_interval) {
             revert();
         }
         s_raffleState = RaffleState.CALCULATING;
-        i_vrfCoordinator.requestRandomWords(
+        uint256 requestId = i_vrfCoordinator.requestRandomWords(
             i_gasLane, i_subscriptionId, REQUEST_CONFIRMATION, i_callbackGasLimit, NUM_WORDS
         );
+        emit RequestedRaffleWinner(requestId);
     }
 
-    function fulfillRandomWords(uint256 /**requestId*/, uint256[] memory randomWords) internal override {
+    function fulfillRandomWords(
+        uint256,
+        /**
+         * requestId
+         */
+        uint256[] memory randomWords
+    ) internal override {
         uint256 indexOfWinner = randomWords[0] % s_players.length;
         address payable winner = s_players[indexOfWinner];
         s_recentWinner = winner;
@@ -127,5 +139,37 @@ contract Raffle is VRFConsumerBaseV2 {
     // Getter functions
     function getEntranceFee() external view returns (uint256) {
         return i_entranceFee;
+    }
+
+    function getRaffleState() public view returns (RaffleState) {
+        return s_raffleState;
+    }
+
+    function getNumWords() public pure returns (uint256) {
+        return NUM_WORDS;
+    }
+
+    function getRequestConfirmations() public pure returns (uint256) {
+        return REQUEST_CONFIRMATION;
+    }
+
+    function getRecentWinner() public view returns (address) {
+        return s_recentWinner;
+    }
+
+    function getPlayer(uint256 index) public view returns (address) {
+        return s_players[index];
+    }
+
+    function getLastTimeStamp() public view returns (uint256) {
+        return s_lastTimestamp;
+    }
+
+    function getInterval() public view returns (uint256) {
+        return i_interval;
+    }
+
+    function getLengthOfPlayers() public view returns (uint256) {
+        return s_players.length;
     }
 }
